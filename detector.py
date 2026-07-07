@@ -298,6 +298,7 @@ def run_detection(image_bgr: np.ndarray) -> DetectionResult:
         try:
             return detector.detect(image_bgr)
         except Exception as exc:  # bad key, network hiccup, etc. - fall through
+            print(f"[run_detection] {detector.name} failed: {type(exc).__name__}: {exc}")
             last_error = exc
             continue
     raise RuntimeError(f"All detectors failed. Last error: {last_error}")
