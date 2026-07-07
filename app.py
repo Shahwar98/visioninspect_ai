@@ -26,7 +26,7 @@ st.set_page_config(page_title="VisionInspect AI", page_icon=None, layout="wide")
 
 
 def render_header():
-    st.title("\U0001F50D VisionInspect AI")
+    st.title("VisionInspect AI")
     st.caption(
         "Automated first-pass visual inspection for industrial infrastructure - "
         "pipelines, tunnels, bridges, and equipment. Upload an inspection image "
