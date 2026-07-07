@@ -21,14 +21,14 @@ instead of crashing if an API key is missing or a network call fails.
 from __future__ import annotations
 
 import os
+import base64
+import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 import cv2
 import numpy as np
-
-import traceback
 
 
 @dataclass
@@ -138,6 +138,7 @@ class RoboflowDetector(BaseDetector):
     DEFAULT_WORKSPACE_NAME = "shahwar"
     DEFAULT_WORKFLOW_ID = "general-segmentation-api"
     DEFAULT_CLASSES = ["Pothole", "Alligator Cracking", "Lateral Cracking"]
+    WORKFLOW_URL_TEMPLATE = "https://serverless.roboflow.com/infer/workflows/{workspace}/{workflow_id}"
 
     def __init__(self, api_key: Optional[str] = None, workspace_name: Optional[str] = None,
                  workflow_id: Optional[str] = None, classes: Optional[List[str]] = None,
@@ -149,32 +150,37 @@ class RoboflowDetector(BaseDetector):
         self.classes = classes or ([c.strip() for c in env_classes.split(",") if c.strip()] or self.DEFAULT_CLASSES)
         self.conf_threshold = conf_threshold
         self.debug_raw_response = debug_raw_response
-        self._client = None
 
     def is_available(self) -> bool:
         return bool(self.api_key)
 
-    def _get_client(self):
-        if self._client is None:
-            from inference_sdk import InferenceHTTPClient
-            self._client = InferenceHTTPClient(
-                api_url="https://serverless.roboflow.com",
-                api_key=self.api_key,
-            )
-        return self._client
-
     def detect(self, image_bgr: np.ndarray) -> DetectionResult:
-        client = self._get_client()
-        # This workflow has a required `classes` input (the same list shown
-        # as selectable buttons in Roboflow's own "Try it" widget) that feeds
-        # a SAM segmentation step - omitting it causes a 400 error, so it's
-        # always passed explicitly rather than relying on a server-side default.
-        raw = client.run_workflow(
-            workspace_name=self.workspace_name,
-            workflow_id=self.workflow_id,
-            images={"image": image_bgr},
-            parameters={"classes": ",".join(self.classes)},
-        )
+        # Calling the documented HTTP endpoint directly rather than going
+        # through inference_sdk's client.run_workflow(): that wrapper's
+        # decode_workflow_outputs() assumes the response is a dict, but this
+        # workflow returns a list, which raises an AttributeError inside the
+        # SDK itself (confirmed via full traceback during live debugging).
+        # Calling the endpoint directly avoids depending on that wrapper's
+        # internal post-processing entirely.
+        import requests
+
+        success, encoded = cv2.imencode(".jpg", image_bgr)
+        if not success:
+            raise RuntimeError("Failed to encode image for Roboflow request")
+        image_b64 = base64.b64encode(encoded.tobytes()).decode("utf-8")
+
+        url = self.WORKFLOW_URL_TEMPLATE.format(workspace=self.workspace_name, workflow_id=self.workflow_id)
+        payload = {
+            "api_key": self.api_key,
+            "inputs": {
+                "image": {"type": "base64", "value": image_b64},
+                "classes": ",".join(self.classes),
+            },
+        }
+
+        response = requests.post(url, json=payload, timeout=30)
+        response.raise_for_status()
+        raw = response.json()
 
         if self.debug_raw_response:
             print("RAW ROBOFLOW WORKFLOW RESPONSE:", raw)
@@ -208,11 +214,15 @@ class RoboflowDetector(BaseDetector):
     def _extract_predictions(raw) -> List[dict]:
         """
         Workflow responses vary based on how the workflow's output blocks
-        are configured. This walks the common shapes (a list wrapping one
-        result per input image, each holding named output blocks) and pulls
+        are configured, and calling the raw HTTP endpoint directly (rather
+        than the inference_sdk wrapper) adds one more possible top-level
+        shape: {"outputs": [...]}. This walks all observed shapes and pulls
         out whatever list of per-object predictions it can find, so a minor
         workflow edit in the Roboflow UI doesn't silently break detection.
         """
+        if isinstance(raw, dict) and "outputs" in raw and isinstance(raw["outputs"], list):
+            raw = raw["outputs"]
+
         if isinstance(raw, list) and raw:
             raw = raw[0]
 
