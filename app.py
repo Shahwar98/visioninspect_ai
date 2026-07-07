@@ -16,7 +16,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from PIL import Image
 
-from detector import run_detection, get_detector_chain
+from detector import run_detection
 from report import get_report_generator
 from utils import assess_risk, draw_detections, pil_to_bgr, bgr_to_pil, export_report_pdf
 
@@ -47,16 +47,8 @@ def render_header():
 
 def render_sidebar() -> bool:
     st.sidebar.header("Settings")
-    use_llm = st.sidebar.toggle(
-        "Enhance summary with Claude",
-        value=False,
-        help="Requires ANTHROPIC_API_KEY. Falls back to the rule-based summary if unavailable.",
-    )
-    st.sidebar.divider()
-    st.sidebar.subheader("Detector availability")
-    for d in get_detector_chain():
-        status = "\u2705 ready" if d.is_available() else "\u26D4 not configured"
-        st.sidebar.write(f"**{d.name}**: {status}")
+    st.sidebar.caption("Claude-enhanced report summaries - coming soon.")
+    use_llm = False
     return use_llm
 
 
@@ -85,10 +77,10 @@ def main():
     annotated_image = bgr_to_pil(annotated_bgr)
 
     with col2:
-        st.subheader(f"Annotated ({result.detector_name})")
+        st.subheader("Annotated")
         st.image(annotated_image, use_container_width=True)
-        if result.notes:
-            st.caption(result.notes)
+        if result.detector_name == "Classical CV Heuristic":
+            st.info("Roboflow unavailable at the moment - using classical CV detection instead.")
 
     risk = assess_risk(result.detections)
 
