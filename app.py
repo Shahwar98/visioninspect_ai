@@ -22,7 +22,7 @@ from utils import assess_risk, draw_detections, pil_to_bgr, bgr_to_pil, export_r
 
 load_dotenv()
 
-st.set_page_config(page_title="VisionInspect AI", page_icon="\U0001F50D", layout="wide")
+st.set_page_config(page_title="VisionInspect AI", page_icon=None, layout="wide")
 
 
 def render_header():
