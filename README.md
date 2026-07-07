@@ -81,10 +81,20 @@ streamlit run app.py
 
 Then open the local URL Streamlit prints (typically `http://localhost:8501`), upload an inspection image, and review the annotated result, risk score, and generated report. Claude-enhanced report summaries are planned but not yet enabled in this build (the code path exists in `report.py` and works if `ANTHROPIC_API_KEY` is set - see Future Improvements).
 
+
 ## Screenshots
 
-*(Add screenshots here after running the app — e.g. `assets/screenshot_upload.png`, `assets/screenshot_report.png`)*
+**App overview**
+![App intro](assets/screenshot_intro.jpg)
 
+**Real detection on a cracked pipe** (Roboflow-hosted model, 5 defects found)
+![Annotated detection](assets/screenshot_detection.jpg)
+
+**Risk scoring, defect table, and generated summary**
+![Results and report](assets/screenshot_results.jpg)
+
+**Downloaded report output**
+![Report file](assets/screenshot_report_output.jpg)
 ## Known Limitations
 
 - **Confidence is class-level, not per-instance.** Validated against the live Roboflow workflow: every detected region of the same class in a single image shares one confidence score (e.g. all "Alligator Cracking" boxes in one image read 91%), while a different class or image shows a different value. This reflects "how confident the model is that this class is present," not independent certainty per bounding box. The risk scoring in `utils.py` still uses defect count as the primary signal for this reason.
