@@ -290,15 +290,24 @@ def run_detection(image_bgr: np.ndarray) -> DetectionResult:
     Tries each detector in priority order and returns the first available
     one's result. ClassicalCVDetector is always available, so in practice
     this never raises - it just degrades to the simplest strategy.
+
+    Any earlier failures are recorded into the successful result's `notes`
+    field, so they're visible directly in the app UI (via the annotated
+    image caption) rather than only in server logs - which is more reliable
+    to actually see, especially on hosted deployments.
     """
-    last_error = None
+    errors = []
     for detector in get_detector_chain():
         if not detector.is_available():
             continue
         try:
-            return detector.detect(image_bgr)
+            result = detector.detect(image_bgr)
+            if errors:
+                prior = " | ".join(errors)
+                failure_note = f"[Note: earlier detector(s) failed first - {prior}]"
+                result.notes = f"{result.notes} {failure_note}".strip() if result.notes else failure_note
+            return result
         except Exception as exc:  # bad key, network hiccup, etc. - fall through
-            print(f"[run_detection] {detector.name} failed: {type(exc).__name__}: {exc}")
-            last_error = exc
+            errors.append(f"{detector.name}: {type(exc).__name__}: {exc}")
             continue
-    raise RuntimeError(f"All detectors failed. Last error: {last_error}")
+    raise RuntimeError(f"All detectors failed. Errors: {' | '.join(errors)}")
