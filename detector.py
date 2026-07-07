@@ -171,7 +171,7 @@ class RoboflowDetector(BaseDetector):
             workspace_name=self.workspace_name,
             workflow_id=self.workflow_id,
             images={"image": image_bgr},
-            parameters={"classes": self.classes},
+            parameters={"classes": ",".join(self.classes)},
         )
 
         if self.debug_raw_response:
