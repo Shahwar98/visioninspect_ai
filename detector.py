@@ -28,6 +28,8 @@ from typing import List, Optional
 import cv2
 import numpy as np
 
+import traceback
+
 
 @dataclass
 class Detection:
@@ -308,6 +310,7 @@ def run_detection(image_bgr: np.ndarray) -> DetectionResult:
                 result.notes = f"{result.notes} {failure_note}".strip() if result.notes else failure_note
             return result
         except Exception as exc:  # bad key, network hiccup, etc. - fall through
-            errors.append(f"{detector.name}: {type(exc).__name__}: {exc}")
+            tb = traceback.format_exc()
+            errors.append(f"{detector.name}: {type(exc).__name__}: {exc}\n{tb}")
             continue
     raise RuntimeError(f"All detectors failed. Errors: {' | '.join(errors)}")
