@@ -4,6 +4,8 @@ Automated first-pass visual inspection for industrial infrastructure — pipelin
 
 ![Status](https://img.shields.io/badge/status-portfolio--project-blue) ![Python](https://img.shields.io/badge/python-3.10%2B-blue) ![Streamlit](https://img.shields.io/badge/UI-Streamlit-red)
 
+**Live demo:** [https://shahwar98-visioninspect-ai-app-fpkufd.streamlit.app/](https://shahwar98-visioninspect-ai-app-fpkufd.streamlit.app/)
+
 ## Overview
 
 Infrastructure inspections generate thousands of images and video frames that engineers must manually review, one at a time, looking for cracks, corrosion, leaks, and other damage. VisionInspect AI automates the *first pass* of that process: upload an inspection image, and the system detects candidate defects, scores overall risk, and produces a downloadable inspection report — the same kind of triage step used by companies building autonomous inspection robots for water pipelines and similar critical infrastructure.
@@ -30,7 +32,7 @@ flowchart LR
     F --> G[Risk Scoring]
     G --> H[Report Generator]
     H -->|default| I[Rule-Based Summary]
-    H -->|optional toggle| J[Claude-Enhanced Narrative]
+    H -->|planned| J[Claude-Enhanced Narrative]
     I --> K[Markdown / PDF Report]
     J --> K
     F --> L[Annotated Image]
@@ -51,7 +53,7 @@ flowchart LR
 - Explainable Low / Medium / High risk scoring
 - Rule-based inspection summary, with an optional Claude-powered narrative
 - Downloadable report in Markdown and PDF
-- Sidebar visibility into which detector is currently active/configured
+- Graceful fallback with a plain-language notice if the primary detector is unavailable
 
 ## Installation
 
@@ -77,7 +79,7 @@ YOLO_WEIGHTS_PATH=                  # optional - local offline YOLO weights
 streamlit run app.py
 ```
 
-Then open the local URL Streamlit prints (typically `http://localhost:8501`), upload an inspection image, and review the annotated result, risk score, and generated report. Toggle "Enhance summary with Claude" in the sidebar to try the LLM-narrative option if `ANTHROPIC_API_KEY` is set.
+Then open the local URL Streamlit prints (typically `http://localhost:8501`), upload an inspection image, and review the annotated result, risk score, and generated report. Claude-enhanced report summaries are planned but not yet enabled in this build (the code path exists in `report.py` and works if `ANTHROPIC_API_KEY` is set - see Future Improvements).
 
 ## Screenshots
 
@@ -86,11 +88,12 @@ Then open the local URL Streamlit prints (typically `http://localhost:8501`), up
 ## Known Limitations
 
 - **Confidence is class-level, not per-instance.** Validated against the live Roboflow workflow: every detected region of the same class in a single image shares one confidence score (e.g. all "Alligator Cracking" boxes in one image read 91%), while a different class or image shows a different value. This reflects "how confident the model is that this class is present," not independent certainty per bounding box. The risk scoring in `utils.py` still uses defect count as the primary signal for this reason.
+- **Detection counts can vary by ±1 for borderline detections depending on image path.** A local file upload is re-encoded (JPEG, in-memory array) before being sent to Roboflow, which can shift pixel values slightly - enough to push a marginal, sub-10-pixel detection across an internal confidence threshold. Verified by comparing identical images sent as a raw file vs. as a re-encoded array; all substantial detections matched exactly, only the smallest borderline one differed.
+- **The classical CV fallback produces more false positives on visually cluttered backgrounds** (dirt, gravel, debris) than on clean surfaces, since it relies on generic edge-density heuristics rather than a trained model. Confirmed by testing an undamaged pipe photo against a rocky/dirt backdrop, which triggered 2-3 low-confidence "possible defect" flags from background texture alone.
 - The classical CV fallback is a heuristic, not a trained model - treat its output as "regions worth a human look," not a defect diagnosis.
 - The Roboflow workflow requires an explicit `classes` parameter (`ROBOFLOW_CLASSES` env var) - Roboflow's workflow schema doesn't currently expose a way to detect "all available classes" without naming them.
 
 ## Future Improvements
-
 
 - Fine-tune a YOLOv8 model on a labeled crack/corrosion dataset for stronger domain-specific accuracy
 - Batch processing mode for reviewing an entire inspection folder/video at once
@@ -104,7 +107,7 @@ Then open the local URL Streamlit prints (typically `http://localhost:8501`), up
 - **Streamlit** — web UI
 - **OpenCV** — image processing and classical CV fallback detector
 - **Ultralytics YOLOv8** — local offline detection strategy
-- **Roboflow Inference SDK** — hosted pretrained crack/corrosion detection model
+- **Roboflow Workflows API** — hosted multi-class defect detection model, called directly via `requests` over its documented HTTP endpoint (bypasses a response-parsing bug found in the `inference-sdk` wrapper during live testing - see `detector.py`)
 - **Anthropic Claude API** — optional LLM-enhanced report narrative
 - **fpdf2** — PDF report export
 - **Pillow / NumPy** — image handling
