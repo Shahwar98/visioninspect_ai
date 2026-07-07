@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import os
 import base64
-import traceback
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -119,19 +118,17 @@ class RoboflowDetector(BaseDetector):
     widget before being wired in here.
 
     Requires ROBOFLOW_API_KEY. Workspace/workflow default to the values
-    confirmed working in Roboflow's UI, but can be overridden with
+    confirmed working end-to-end (validated in Colab, then in this live app
+    against real crack/pothole photos), but can be overridden with
     ROBOFLOW_WORKSPACE_NAME / ROBOFLOW_WORKFLOW_ID if the workflow is renamed
     or rebuilt later.
 
-    Note on parsing: Workflow responses (especially segmentation ones) can
-    nest predictions differently than a plain model `infer()` call. Rather
-    than hard-coding one exact shape (which would break silently if the
-    workflow is edited), `_extract_predictions` walks a few known response
-    shapes. If Roboflow changes the schema in a way this doesn't handle,
-    `is_available()` still returns True and the call will simply surface a
-    parsing issue rather than crash the app - inspect the raw response
-    (see the `debug_raw_response` flag) if detections come back empty
-    unexpectedly.
+    Calls the documented HTTP workflow endpoint directly with `requests`
+    rather than through inference_sdk's client.run_workflow(): that wrapper's
+    internal decode_workflow_outputs() assumes a dict response, but this
+    workflow returns a list, which raised an AttributeError inside the SDK
+    itself (confirmed via full traceback during live debugging). Calling the
+    endpoint directly avoids depending on that wrapper's post-processing.
     """
 
     name = "Roboflow Hosted Workflow"
@@ -303,10 +300,10 @@ def run_detection(image_bgr: np.ndarray) -> DetectionResult:
     one's result. ClassicalCVDetector is always available, so in practice
     this never raises - it just degrades to the simplest strategy.
 
-    Any earlier failures are recorded into the successful result's `notes`
-    field, so they're visible directly in the app UI (via the annotated
-    image caption) rather than only in server logs - which is more reliable
-    to actually see, especially on hosted deployments.
+    If an earlier, higher-priority detector fails (bad key, network issue,
+    API error), a short note about it is attached to the successful result
+    so it's visible in the UI - useful for noticing a misconfigured API key
+    without needing to check server logs.
     """
     errors = []
     for detector in get_detector_chain():
@@ -320,7 +317,6 @@ def run_detection(image_bgr: np.ndarray) -> DetectionResult:
                 result.notes = f"{result.notes} {failure_note}".strip() if result.notes else failure_note
             return result
         except Exception as exc:  # bad key, network hiccup, etc. - fall through
-            tb = traceback.format_exc()
-            errors.append(f"{detector.name}: {type(exc).__name__}: {exc}\n{tb}")
+            errors.append(f"{detector.name}: {type(exc).__name__}: {exc}")
             continue
     raise RuntimeError(f"All detectors failed. Errors: {' | '.join(errors)}")
